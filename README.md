@@ -1,4 +1,4 @@
-# MDPeek Attack and Defense
+# MDPeek Attack
 
 ## Introduction
 
@@ -6,14 +6,12 @@ This repository contains the following components:
 
 1. Code to validate the feasibility of **MDPeek** against SGX.
 2. An end-to-end MDPeek attack example targeting **MbedTLS**.
-3. **Store-to-load coupling** defense technique against MDPeek, implemented using the LLVM backend.
+
 
 ```shell
 .
 ├── attack-demo       -- Code to validate the feasibility of MDPeek
-├── attack-mbedtls    -- Attack example targeting MbedTLS
-└── defense           -- Store-to-load coupling defense for MbedTLS, including fence and align strategies
-
+└── attack-mbedtls    -- Attack example targeting MbedTLS
 ```
 
 Each directory contains a more detailed `readme.md` file, which outlines the environment requirements, build instructions, and usage.
@@ -29,15 +27,6 @@ The attack process is illustrated in **Figure 1**. The attacker hijacks the cont
 <figure style="text-align: center;">
     <img src="imgs\fig-1.svg" alt="Workflow of MDPeek" width="80%" />
     <figcaption style="text-align: center;">Figure 1. Workflow of MDPeek.</figcaption>
-</figure>
-
-## Defense
-
-To defend against MDPeek, we propose a **store-to-load coupling** technique. The idea is to explicitly introduce a data dependence between the store and the load, thereby preventing the CPU from updating the MDU when executing a store-load pair. As shown in **Figure 2**, we establish a data dependence between the store's address (`%rdi`) and the load's address (`%rsi`) by inserting an `and` instruction between them. Since the store and load are no longer ambiguous, the CPU no longer updates the MDU. For more details on the MDU update logic, please refer to our paper.
-
-<figure style="text-align: center;">
-    <img src="imgs\fig-2.svg" alt="Store-to-load Coupling to mitigate MDPeek" width="60%" />
-    <figcaption style="text-align: center;">Figure 2. Store-to-load coupling technique to mitigate MDPeek.</figcaption>
 </figure>
 
 ## Research Paper
