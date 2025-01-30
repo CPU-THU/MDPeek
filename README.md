@@ -25,7 +25,7 @@ In the MDPeek threat model, the victim is a user application running inside SGX,
 The attack process is illustrated in **Figure 1**. The attacker hijacks the control flow via a page fault (①) before the victim executes a branch dependent on secret data (line 1), then initializes the MDU state (②). Due to the delayed store, the load instruction on the branch path updates specific MDU counters (line 2,3,6,7), as the MDU counters are indexed by the least significant 8 bits of the load instruction's program counter (③). After the branch is executed, the attacker hijacks the control flow again and probes the MDU updates (④), leaking the victim’s `secret`.
 
 <figure style="text-align: center;">
-    <img src="imgs\fig-1.svg" alt="Workflow of MDPeek" width="80%" />
+    <img src="imgs\figure-1.png" alt="Workflow of MDPeek" width="80%" />
     <figcaption style="text-align: center;">Figure 1. Workflow of MDPeek.</figcaption>
 </figure>
 
