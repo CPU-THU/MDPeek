@@ -20,7 +20,7 @@ The PoC requires gcc and g++ compilers. An example environment setup is as follo
 
 ### Build
 
-First, update the SGX-Step and SGX SDK paths in `Makefile` if necessary. SGX SDK path locates in line 34 of `Makefile`.
+First, update the SGX SDK path in `Makefile` if necessary. SGX SDK path locates in line 34 of `Makefile`.
 
 ```makefile
 ...
