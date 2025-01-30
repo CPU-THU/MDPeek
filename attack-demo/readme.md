@@ -68,3 +68,5 @@ Leak byte 9: C (1 1 0 0 0 0 1 0 )
 Leak byte 10: . (0 1 1 1 0 1 0 0 )
 Recovered Secret: MDPeek PoC.
 ```
+
+Note: The secret string is in `./Enclave/Enclave.cpp`, i.e. `buf[BUFSIZ]`, which can be replaced by another string.

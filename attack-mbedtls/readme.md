@@ -61,7 +61,7 @@ app  App  attack.py  Enclave  enclave.signed.so  enclave.so  lib  Makefile  read
 
 ### Run
 
-First, disable ASLR because the attacker has the root privilege:
+First, disable ASLR because the attacker has the root privilege (in the threat module):
 
 ```shell
 sudo ./scripts/disable_aslr.sh
@@ -72,6 +72,7 @@ Second, run the attack:
 ```shell
 python3 attack.py
 ```
+(Note: python version >=3.7)
 
 If the attack procedure gets stuck due to a communication issue, kill the process and try again.
 
