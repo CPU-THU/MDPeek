@@ -1,9 +1,9 @@
 .text
 .align 1024
-.rep 80
+.rep 80         # modify this to adjust the first load PC
 nop
 .endr
-.global stld_probe_1  # 0x61
+.global stld_probe_1
 stld_probe_1:
     rdtscp
     shl $32, %rdx
@@ -28,10 +28,10 @@ stld_probe_1:
     ret
 
 .align 1024
-.rep 107
+.rep 107        # modify this to adjust the second load PC
 nop
 .endr
-.global stld_probe_2  # 0x7c
+.global stld_probe_2
 stld_probe_2:
     rdtscp
     shl $32, %rdx

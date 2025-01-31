@@ -20,14 +20,19 @@ enclave {
     from "TrustedLibrary/Thread.edl" import *;
 
     /* 
-     * ocall_print_string - invokes OCALL to display string buffer inside the enclave.
-     *  [in]: copy the string buffer to App outside.
-     *  [string]: specifies 'str' is a NULL terminated buffer.
+     * secretDependentBranch - invokes ECALL to execute secret-dependent branch inside the enclave.
+     *  idx_secret: byte index of the secret string
+     *  idx_byte_offset: bit offset of a specific secret byte
      */
     trusted{
         public void secretDependentBranch(int idx_secret, int idx_byte_offset);
     };
 
+    /* 
+     * ocall_print_string - invokes OCALL to display string buffer inside the enclave.
+     *  [in]: copy the string buffer to App outside.
+     *  [string]: specifies 'str' is a NULL terminated buffer.
+     */
     untrusted {
         void ocall_print_string([in, string] const char *str);
     };

