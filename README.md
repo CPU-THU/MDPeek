@@ -32,3 +32,9 @@ The attack process is illustrated in **Figure 1**. The attacker hijacks the cont
 ## Research Paper
 
 For more detailed research on MDPeek, please refer to the paper *MDPeek: Breaking Balanced Branches in SGX with Memory Disambiguation Unit Side Channels*, which has been accepted to the Proceedings of the 30th ACM International Conference on Architectural Support for Programming Languages and Operating Systems (ASPLOS 25).
+
+## License
+
+This project is now licensed under the terms of the GNU General Public License v3.0 (GPLv3).
+
+Previously licensed under the Apache License 2.0.
